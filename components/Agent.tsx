@@ -61,9 +61,22 @@ const Agent = ({
       setIsSpeaking(false);
     };
 
-    const onError = (error: Error) => {
-      console.log("Error:", error);
+    // --- MODIFIED ERROR HANDLER START ---
+    const onError = (e: any) => {
+      const errorMsg = e.error?.message || e.message || JSON.stringify(e);
+      
+      // Ignore the "ejection" error which is actually a normal call end signal
+      if (
+        errorMsg.includes("Meeting ended due to ejection") || 
+        errorMsg.includes("Meeting has ended")
+      ) {
+        console.log("Call ended normally (suppressed ejection error)");
+        return;
+      }
+
+      console.error("Vapi Error:", e);
     };
+    // --- MODIFIED ERROR HANDLER END ---
 
     vapi.on("call-start", onCallStart);
     vapi.on("call-end", onCallEnd);

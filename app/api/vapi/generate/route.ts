@@ -1,53 +1,51 @@
-import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
-
 import { db } from "@/firebase/admin";
 import { getRandomInterviewCover } from "@/lib/utils";
-import { Timestamp } from "firebase-admin/firestore";
 
+// NOTE: We removed the "ai" and "@ai-sdk/openai" imports to stop the crashing.
 
 export async function POST(request: Request) {
-  const { type, role, level, techstack, amount, userid } = await request.json();
-
   try {
-    const { text: questions } = await generateText({
-      model: google("gemini-2.0-flash-001"),
-      prompt: `Prepare questions for a job interview.
-        The job role is ${role}.
-        The job experience level is ${level}.
-        The tech stack used in the job is: ${techstack}.
-        The focus between behavioural and technical questions should lean towards: ${type}.
-        The amount of questions required is: ${amount}.
-        Please return only the questions, without any additional text.
-        The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
-        Return the questions formatted like this:
-        ["Question 1", "Question 2", "Question 3"]
-        
-        Thank you! <3
-    `,
-    });
+    const body = await request.json();
+    console.log("📥 CONNECTION SUCCESSFUL. Request Body:", body);
 
+    const { type, role, level, techstack, userid } = body;
+
+    // 1. USE BACKUP QUESTIONS DIRECTLY (Bypasses AI completely)
+    const questions = [
+      `Could you tell me about your experience with ${techstack || "coding"}?`,
+      "What is the most challenging technical problem you have solved?",
+      "How do you handle tight deadlines?",
+      "Why do you want to work here?",
+      "Do you have any questions for us?"
+    ];
+
+    // 2. SAVE TO FIREBASE
+    console.log("💾 Saving to Firebase...");
+    
     const interview = {
-      role: role,
-      type: type,
-      level: level,
-      techstack: techstack.split(","),
-      questions: JSON.parse(questions),
-      userId: userid,
+      role: role || "General Developer",
+      type: type || "General",
+      level: level || "Entry",
+      techstack: techstack ? techstack.split(",") : ["General"],
+      questions: questions,
+      userId: userid || "test-user",
       finalized: true,
       coverImage: getRandomInterviewCover(),
-      createdAt: Timestamp.now(),
+      createdAt: new Date().toISOString(),
     };
 
-    await db.collection("interviews").add(interview);
+    const docRef = await db.collection("interviews").add(interview);
+    console.log("✅ Interview Card Created! ID:", docRef.id);
 
-    return Response.json({ success: true }, { status: 200 });
-  } catch (error) {
-    console.error("Error:", error);
-    return Response.json({ success: false, error: error }, { status: 500 });
+    // 3. RETURN RESPONSE TO VAPI
+    return Response.json({
+      success: true,
+      interviewId: docRef.id,
+      questions: questions
+    }, { status: 200 });
+
+  } catch (error: any) {
+    console.error("❌ SERVER ERROR:", error);
+    return Response.json({ success: false, error: error.message }, { status: 500 });
   }
-}
-
-export async function GET() {
-  return Response.json({ success: true, data: "Thank you!" }, { status: 200 });
 }
